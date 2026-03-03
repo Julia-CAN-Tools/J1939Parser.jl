@@ -1,11 +1,33 @@
 # J1939 decoding - implements CANUtils interface
 
 """
-    CU.decode!(frame::CanFrame, message::CanMessage, sigdict::Dict{String,Float64})
+    decode!(frame::CanFrame, message::CanMessage, sigdict::Dict{String,Float64}) -> Dict{String,Float64}
 
-Decode a CAN frame using the J1939 message definition.
+Decode a CAN frame using a J1939 [`CanMessage`](@ref) definition.
 
-Implements the CANUtils interface for CanMessage.
+For each signal in `message.signals`, extracts the raw bits from `frame.data` and converts
+to a physical value: `physical = raw * scaling + offset`. Results are written into `sigdict`
+(existing keys are overwritten).
+
+# Arguments
+- `frame::CanFrame` — The CAN frame to decode.
+- `message::CanMessage` — J1939 message definition with signal specs.
+- `sigdict::Dict{String,Float64}` — Dictionary to receive decoded values (modified in-place).
+
+# Returns
+The updated `sigdict`.
+
+# Example
+
+```julia
+sig = Signal("EngineRPM", 4, 1, 16, 0.125, 0.0)
+msg = CanMessage("EEC1", CanId(3, 0xF0, 0x04, 0x00), [sig])
+frame = CanFrame(encode_can_id(msg.canid), UInt8[0x00, 0x00, 0x00, 0x40, 0x1F, 0x00, 0x00, 0x00])
+
+sigdict = Dict{String,Float64}()
+decode!(frame, msg, sigdict)
+sigdict["EngineRPM"]  # physical RPM value
+```
 """
 function CU.decode!(frame::CanFrame, message::CanMessage, sigdict::Dict{String,Float64})
     data_g = data_to_int(frame.data)
@@ -17,12 +39,38 @@ function CU.decode!(frame::CanFrame, message::CanMessage, sigdict::Dict{String,F
 end
 
 """
-    CU.match_and_decode!(frame::CanFrame, messages::Vector{CanMessage}, sigdict::Dict{String,Float64})
+    match_and_decode!(frame::CanFrame, messages::Vector{CanMessage}, sigdict::Dict{String,Float64}) -> Bool
 
-Find a matching J1939 message and decode.
+Find a matching J1939 message definition for `frame` and decode it into `sigdict`.
 
-Matches by PF, PS, SA and multiplexer bytes if defined.
-Implements the CANUtils interface for Vector{CanMessage}.
+Matching is performed on **PF, PS, and SA fields only**. Priority, EDP, and DP are
+intentionally ignored — the same PGN may appear at different priorities, and EDP/DP
+rarely vary in practice. The first match in `messages` wins.
+
+# Arguments
+- `frame::CanFrame` — The incoming CAN frame.
+- `messages::Vector{CanMessage}` — Known J1939 message definitions.
+- `sigdict::Dict{String,Float64}` — Dictionary to receive decoded values (modified in-place).
+
+# Returns
+- `true` — a match was found and `sigdict` was updated.
+- `false` — no match; `sigdict` is unchanged.
+
+# Example
+
+```julia
+eec1 = CanMessage("EEC1", CanId(3, 0xF0, 0x04, 0x00),
+                  [Signal("EngineRPM", 4, 1, 16, 0.125, 0.0)])
+messages = [eec1]
+sigdict = create_signal_dict(messages)
+
+frame = CanFrame(0x0CF00400, UInt8[0x00, 0x00, 0x00, 0x40, 0x1F, 0x00, 0x00, 0x00])
+matched = match_and_decode!(frame, messages, sigdict)  # true
+
+# Unknown message → no match
+frame2 = CanFrame(0x18FF0000, UInt8[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+match_and_decode!(frame2, messages, sigdict)  # false
+```
 """
 function CU.match_and_decode!(frame::CanFrame, messages::Vector{CanMessage}, sigdict::Dict{String,Float64})
     cid = decode_can_id(frame.canid)

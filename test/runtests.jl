@@ -102,6 +102,15 @@ using J1939Parser
             @test contains(s, "PF")
             @test contains(s, "0xFE")
         end
+
+        @testset "validation" begin
+            @test_throws ArgumentError CanId(UInt8(8), UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0))  # priority > 7
+            @test_throws ArgumentError CanId(UInt8(0), UInt8(2), UInt8(0), UInt8(0), UInt8(0), UInt8(0))  # edp > 1
+            @test_throws ArgumentError CanId(UInt8(0), UInt8(0), UInt8(2), UInt8(0), UInt8(0), UInt8(0))  # dp > 1
+            # Valid edge cases
+            @test CanId(UInt8(7), UInt8(1), UInt8(1), UInt8(0xFF), UInt8(0xFF), UInt8(0xFF)) isa CanId
+            @test CanId() isa CanId
+        end
     end
 
     # =========================================================================
@@ -287,13 +296,18 @@ using J1939Parser
             @test frame.data[1] == 200
         end
 
-        @testset "negative raw clamped to zero" begin
+        @testset "negative raw throws ArgumentError" begin
             sig = Signal("Val", 1, 1, 8, 1.0, 0.0)
             msg = CanMessage("Test", CanId(), [sig])
-
             sigdict = Dict("Val" => -50.0)
-            frame = encode(msg, sigdict)
-            @test frame.data[1] == 0x00
+            @test_throws ArgumentError encode(msg, sigdict)
+        end
+
+        @testset "overflow throws ArgumentError" begin
+            sig = Signal("Val", 1, 1, 8, 1.0, 0.0)
+            msg = CanMessage("Test", CanId(), [sig])
+            sigdict = Dict("Val" => 256.0)  # 256 exceeds 8-bit max (255)
+            @test_throws ArgumentError encode(msg, sigdict)
         end
 
         @testset "multiple signals" begin
@@ -406,6 +420,30 @@ using J1939Parser
 
         sig = Signal("Test", 1, 1, 8, 1.0, 0.0)
         @test sig isa Signal
+    end
+
+    # =========================================================================
+    # pgn
+    # =========================================================================
+    @testset "pgn" begin
+        @testset "PDU2 format (PF >= 0xF0)" begin
+            cid = CanId(6, 0xFE, 0xCA, 0x00)
+            @test pgn(cid) == UInt32(0xFECA)
+        end
+
+        @testset "PDU1 format (PF < 0xF0)" begin
+            cid = CanId(6, 0xEF, 0x21, 0x00)
+            @test pgn(cid) == UInt32(0xEF00)  # PS excluded
+        end
+
+        @testset "with EDP and DP" begin
+            cid = CanId(UInt8(6), UInt8(1), UInt8(1), UInt8(0xFE), UInt8(0xCA), UInt8(0x00))
+            @test pgn(cid) == UInt32((1 << 17) | (1 << 16) | 0xFECA)
+        end
+
+        @testset "from raw id" begin
+            @test pgn(UInt32(0x18FECA00)) == UInt32(0xFECA)
+        end
     end
 
     # =========================================================================

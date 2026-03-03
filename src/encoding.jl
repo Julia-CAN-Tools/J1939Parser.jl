@@ -1,11 +1,40 @@
 # J1939 encoding - implements CANUtils interface
 
 """
-    CU.encode(message::CanMessage, sigdict::AbstractDict{String,<:Real}) -> CanFrame
+    encode(message::CanMessage, sigdict::AbstractDict{String,<:Real}) -> CanFrame
 
-Encode signal values into a CAN frame using the J1939 message definition.
+Encode physical signal values into a CAN frame using a J1939 [`CanMessage`](@ref) definition.
 
-Implements the CANUtils interface for CanMessage.
+For each signal in `message.signals`:
+1. Looks up the physical value in `sigdict` by signal name.
+2. Converts to raw: `raw = round((physical - offset) / scaling)`.
+3. Validates the raw value is non-negative and fits in the signal's bit length.
+4. Packs the raw bits into the correct position in the 8-byte payload.
+
+The resulting frame's CAN ID is computed from `message.canid` via [`encode_can_id`](@ref).
+
+# Arguments
+- `message::CanMessage` — J1939 message definition.
+- `sigdict::AbstractDict{String,<:Real}` — Signal name → physical value mapping.
+
+# Returns
+A [`CanFrame`](@ref) with the encoded CAN ID and payload.
+
+# Throws
+- `KeyError` — if a signal name is missing from `sigdict`.
+- `ArgumentError` — if `scaling == 0`, raw value is negative, or raw overflows the bit length.
+
+# Example
+
+```julia
+sig = Signal("EngineRPM", 4, 1, 16, 0.125, 0.0)
+msg = CanMessage("EEC1", CanId(3, 0xF0, 0x04, 0x00), [sig])
+
+sigdict = Dict("EngineRPM" => 1500.0)
+frame = encode(msg, sigdict)
+# frame.canid == 0x0CF00400
+# frame.data contains raw 12000 (1500.0 / 0.125) in bytes 4-5
+```
 """
 function CU.encode(message::CanMessage, sigdict::AbstractDict{String,<:Real})
     data_g = UInt64(0)
@@ -15,8 +44,14 @@ function CU.encode(message::CanMessage, sigdict::AbstractDict{String,<:Real})
         sig.scaling == 0.0 && throw(ArgumentError("Signal scaling must be non-zero"))
 
         raw = (sigdict[sig.name] - sig.offset) / sig.scaling
-        raw = raw < 0 ? 0.0 : raw
-        sigbits = UInt64(round(raw))
+        raw_rounded = round(Int64, raw)
+        raw_rounded < 0 && throw(ArgumentError(
+            "Signal '$(sig.name)': physical value $(sigdict[sig.name]) yields negative raw value " *
+            "$raw_rounded (below representable range for offset=$(sig.offset), scaling=$(sig.scaling))"))
+        max_raw = sig.length >= 64 ? typemax(UInt64) : (UInt64(1) << sig.length) - UInt64(1)
+        UInt64(raw_rounded) > max_raw && throw(ArgumentError(
+            "Signal '$(sig.name)': raw value $raw_rounded exceeds $(sig.length)-bit maximum ($max_raw)"))
+        sigbits = UInt64(raw_rounded)
         data_g = add_signal(data_g, sigbits, sig)
     end
 
@@ -26,11 +61,27 @@ function CU.encode(message::CanMessage, sigdict::AbstractDict{String,<:Real})
 end
 
 """
-    CU.create_signal_dict(messages::Vector{CanMessage}) -> Dict{String,Float64}
+    create_signal_dict(messages::Vector{CanMessage}) -> Dict{String,Float64}
 
-Create a signal dictionary with all signal names from the J1939 messages.
+Create a signal dictionary pre-populated with every signal name from the given J1939
+messages, all initialized to `0.0`. Pass this dictionary to [`decode!`](@ref) or
+[`match_and_decode!`](@ref) to receive decoded values.
 
-Implements the CANUtils interface for Vector{CanMessage}.
+# Arguments
+- `messages::Vector{CanMessage}` — J1939 message definitions.
+
+# Returns
+A `Dict{String,Float64}` with all signal names as keys, initialized to `0.0`.
+
+# Example
+
+```julia
+eec1 = CanMessage("EEC1", CanId(3, 0xF0, 0x04, 0x00),
+                  [Signal("EngineRPM", 4, 1, 16, 0.125, 0.0),
+                   Signal("EngineLoad", 3, 1, 8, 1.0, 0.0)])
+sigdict = create_signal_dict([eec1])
+# Dict("EngineRPM" => 0.0, "EngineLoad" => 0.0)
+```
 """
 function CU.create_signal_dict(messages::Vector{CanMessage})
     sigdict = Dict{String,Float64}()
@@ -45,9 +96,31 @@ function CU.create_signal_dict(messages::Vector{CanMessage})
 end
 
 """
-    create_signal_dict_storage(messages::Vector{CanMessage})
+    create_signal_dict_storage(messages::Vector{CanMessage}) -> Dict{String,Vector{Float64}}
 
-Create a storage dictionary for signal history.
+Create a storage dictionary for recording signal time-series history. Each signal name
+maps to an empty `Float64[]` vector. Use with [`store_sigdict!`](@ref) (from CANUtils) to
+accumulate values over time for logging or plotting.
+
+# Arguments
+- `messages::Vector{CanMessage}` — J1939 message definitions.
+
+# Returns
+A `Dict{String,Vector{Float64}}` with all signal names as keys, each mapping to an empty vector.
+
+# Example
+
+```julia
+eec1 = CanMessage("EEC1", CanId(3, 0xF0, 0x04, 0x00),
+                  [Signal("EngineRPM", 4, 1, 16, 0.125, 0.0)])
+storage = create_signal_dict_storage([eec1])
+# Dict("EngineRPM" => Float64[])
+
+# In a decode loop:
+sigdict = create_signal_dict([eec1])
+# ... decode frames into sigdict ...
+store_sigdict!(sigdict, storage)  # appends current values
+```
 """
 function create_signal_dict_storage(messages::Vector{CanMessage})
     store = Dict{String,Vector{Float64}}()
