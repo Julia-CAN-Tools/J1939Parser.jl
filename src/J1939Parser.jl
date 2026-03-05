@@ -60,6 +60,7 @@ using CANUtils: add_bits, add_signal, uint_to_payload
 using CANUtils: decode!, match_and_decode!, encode, create_signal_dict
 
 using Printf
+using PrecompileTools
 
 # J1939 bit masks
 const PRIORITY_MASK = UInt32(0x1c000000)
@@ -91,4 +92,35 @@ export encode_can_id, decode_can_id, pgn
 export decode!, match_and_decode!, encode, create_signal_dict
 export create_signal_dict_storage
 
-end 
+@compile_workload begin
+    # CanId constructors + utilities
+    cid = CanId(UInt8(6), UInt8(0), UInt8(0), UInt8(0xFE), UInt8(0xCA), UInt8(0x00))
+    cid2 = CanId(3, 0xF0, 0x04, 0x00)
+    cid3 = CanId(UInt32(0x18FECA00))
+    CanId()
+    raw = encode_can_id(cid)
+    decode_can_id(raw)
+    pgn(cid)
+    pgn(UInt32(0x18FECA00))
+
+    # CanMessage construction
+    sig = Signal("PrecompRPM", 1, 1, 16, 0.125, 0.0)
+    msg = CanMessage("PrecompMsg", cid2, [sig])
+    CanMessage()
+
+    # create_signal_dict (with and without extra_names)
+    sd = create_signal_dict([msg])
+    sd2 = create_signal_dict([msg], ["Extra"])
+    store = create_signal_dict_storage([msg])
+    store2 = create_signal_dict_storage([msg], ["Extra"])
+
+    # decode! / match_and_decode! / encode
+    frame = CanFrame(encode_can_id(cid2), UInt8[0x40, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+    CU.decode!(frame, msg, sd)
+    CU.match_and_decode!(frame, [msg], sd)
+    sd["PrecompRPM"] = 1000.0
+    CU.encode(msg, sd)
+end
+
+end
+

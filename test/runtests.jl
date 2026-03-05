@@ -447,6 +447,83 @@ using J1939Parser
     end
 
     # =========================================================================
+    # extra_names support
+    # =========================================================================
+    @testset "create_signal_dict with extra_names" begin
+        msg = CanMessage("M1", CanId(), [Signal("A", 1, 1, 8, 1.0, 0.0)])
+
+        @testset "extra keys included" begin
+            sd = create_signal_dict([msg], ["Extra1", "Extra2"])
+            @test haskey(sd, "A")
+            @test haskey(sd, "Extra1")
+            @test haskey(sd, "Extra2")
+            @test sd["Extra1"] == 0.0
+        end
+
+        @testset "empty messages with extra_names" begin
+            sd = create_signal_dict(CanMessage[], ["OnlyExtra"])
+            @test length(sd) == 1
+            @test sd["OnlyExtra"] == 0.0
+        end
+
+        @testset "backward compatible without extra_names" begin
+            sd = create_signal_dict([msg])
+            @test length(sd) == 1
+            @test haskey(sd, "A")
+        end
+    end
+
+    @testset "create_signal_dict_storage with extra_names" begin
+        msg = CanMessage("M1", CanId(), [Signal("A", 1, 1, 8, 1.0, 0.0)])
+
+        @testset "extra keys included" begin
+            store = create_signal_dict_storage([msg], ["Extra"])
+            @test haskey(store, "A")
+            @test haskey(store, "Extra")
+            @test store["Extra"] == Float64[]
+        end
+
+        @testset "empty messages with extra_names" begin
+            store = create_signal_dict_storage(CanMessage[], ["OnlyExtra"])
+            @test length(store) == 1
+            @test store["OnlyExtra"] == Float64[]
+        end
+    end
+
+    # =========================================================================
+    # Duplicate signal name detection
+    # =========================================================================
+    @testset "duplicate signal name detection" begin
+        @testset "duplicate throws ArgumentError" begin
+            @test_throws ArgumentError CanMessage("Bad", CanId(),
+                [Signal("A", 1, 1, 8, 1.0, 0.0), Signal("A", 2, 1, 8, 1.0, 0.0)])
+        end
+
+        @testset "unique names accepted" begin
+            msg = CanMessage("Good", CanId(),
+                [Signal("A", 1, 1, 8, 1.0, 0.0), Signal("B", 2, 1, 8, 1.0, 0.0)])
+            @test length(msg.signals) == 2
+        end
+    end
+
+    # =========================================================================
+    # Type stability
+    # =========================================================================
+    @testset "type stability" begin
+        cid = CanId(6, 0xF0, 0x04, 0x00)
+        sig = Signal("RPM", 1, 1, 16, 0.125, 0.0)
+        msg = CanMessage("EEC1", cid, [sig])
+        frame = CanFrame(encode_can_id(cid), UInt8[0x40, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+        sigdict = Dict{String,Float64}("RPM" => 0.0)
+
+        @test @inferred(encode_can_id(cid)) isa UInt32
+        @test @inferred(pgn(cid)) isa UInt32
+        @test @inferred(decode!(frame, msg, sigdict)) isa Dict{String,Float64}
+        @test @inferred(match_and_decode!(frame, [msg], sigdict)) isa Bool
+        @test @inferred(encode(msg, sigdict)) isa CanFrame
+    end
+
+    # =========================================================================
     # J1939 bit masks
     # =========================================================================
     @testset "J1939 masks" begin

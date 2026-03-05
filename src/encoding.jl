@@ -43,7 +43,7 @@ function CU.encode(message::CanMessage, sigdict::AbstractDict{String,<:Real})
         haskey(sigdict, sig.name) || throw(KeyError(sig.name))
         sig.scaling == 0.0 && throw(ArgumentError("Signal scaling must be non-zero"))
 
-        raw = (sigdict[sig.name] - sig.offset) / sig.scaling
+        raw = (Float64(sigdict[sig.name]) - sig.offset) / sig.scaling
         raw_rounded = round(Int64, raw)
         raw_rounded < 0 && throw(ArgumentError(
             "Signal '$(sig.name)': physical value $(sigdict[sig.name]) yields negative raw value " *
@@ -83,13 +83,17 @@ sigdict = create_signal_dict([eec1])
 # Dict("EngineRPM" => 0.0, "EngineLoad" => 0.0)
 ```
 """
-function CU.create_signal_dict(messages::Vector{CanMessage})
+function CU.create_signal_dict(messages::Vector{CanMessage}, extra_names::Vector{String}=String[])
     sigdict = Dict{String,Float64}()
 
     for message in messages
         for sig in message.signals
             sigdict[sig.name] = 0.0
         end
+    end
+
+    for name in extra_names
+        sigdict[name] = 0.0
     end
 
     return sigdict
@@ -122,13 +126,17 @@ sigdict = create_signal_dict([eec1])
 store_sigdict!(sigdict, storage)  # appends current values
 ```
 """
-function create_signal_dict_storage(messages::Vector{CanMessage})
+function create_signal_dict_storage(messages::Vector{CanMessage}, extra_names::Vector{String}=String[])
     store = Dict{String,Vector{Float64}}()
 
     for message in messages
         for sig in message.signals
             store[sig.name] = Float64[]
         end
+    end
+
+    for name in extra_names
+        store[name] = Float64[]
     end
 
     return store

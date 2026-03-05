@@ -44,6 +44,12 @@ struct CanMessage <: AbstractCanMessage
     signals::Vector{Signal}
 
     function CanMessage(name::AbstractString, canid::CanId, signals::Vector{Signal})
+        seen = Set{String}()
+        for sig in signals
+            sig.name in seen && throw(ArgumentError(
+                "CanMessage '$name': duplicate signal name '$(sig.name)'"))
+            push!(seen, sig.name)
+        end
         return new(String(name), canid, copy(signals))
     end
 

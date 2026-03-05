@@ -127,7 +127,7 @@ id = CanId(3, 0xF0, 0x04, 0x00)
 raw = encode_can_id(id)  # 0x0CF00400
 ```
 """
-function encode_can_id(canid::CanId)
+@inline function encode_can_id(canid::CanId)
     return (UInt32(canid.priority) << 26) |
            (UInt32(canid.edp) << 25) |
            (UInt32(canid.dp) << 24) |
@@ -149,7 +149,7 @@ id.pf  # 0xFE
 id.ps  # 0xF2
 ```
 """
-decode_can_id(rawid::Integer) = CanId(rawid)
+@inline decode_can_id(rawid::Integer) = CanId(rawid)
 
 """
     pgn(canid::CanId) -> UInt32
@@ -178,7 +178,7 @@ pgn(id)  # 0x0000EA00  (PS excluded)
 pgn(0x0CF00400)  # 0x0000F004
 ```
 """
-function pgn(canid::CanId)
+@inline function pgn(canid::CanId)
     base = (UInt32(canid.edp) << 17) | (UInt32(canid.dp) << 16) | (UInt32(canid.pf) << 8)
     if canid.pf >= 0xF0
         return base | UInt32(canid.ps)
@@ -192,4 +192,4 @@ end
 
 Compute the PGN from a raw 29-bit CAN identifier. Shorthand for `pgn(CanId(rawid))`.
 """
-pgn(rawid::Integer) = pgn(CanId(rawid))
+@inline pgn(rawid::Integer) = pgn(CanId(rawid))
