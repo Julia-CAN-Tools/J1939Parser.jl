@@ -29,7 +29,7 @@ decode!(frame, msg, sigdict)
 sigdict["EngineRPM"]  # physical RPM value
 ```
 """
-function CU.decode!(frame::CanFrame, message::CanMessage, sigdict::Dict{String,Float64})
+@inline function CU.decode!(frame::CanFrame, message::CanMessage, sigdict::Dict{String,Float64})
     data_g = data_to_int(frame.data)
     for sig in message.signals
         sigbits = extract_signal(data_g, sig)
@@ -72,12 +72,15 @@ frame2 = CanFrame(0x18FF0000, UInt8[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x
 match_and_decode!(frame2, messages, sigdict)  # false
 ```
 """
-function CU.match_and_decode!(frame::CanFrame, messages::Vector{CanMessage}, sigdict::Dict{String,Float64})
-    cid = decode_can_id(frame.canid)
+@inline function CU.match_and_decode!(frame::CanFrame, messages::Vector{CanMessage}, sigdict::Dict{String,Float64})
+    rawid    = frame.canid
+    frame_pf = UInt8((rawid >> 16) & 0xFF)
+    frame_ps = UInt8((rawid >>  8) & 0xFF)
+    frame_sa = UInt8( rawid        & 0xFF)
 
     for message in messages
-        # Match by PF, PS, SA
-        if cid.pf == message.canid.pf && cid.ps == message.canid.ps && cid.sa == message.canid.sa
+        mid = message.canid
+        if frame_pf == mid.pf && frame_ps == mid.ps && frame_sa == mid.sa
             CU.decode!(frame, message, sigdict)
             return true
         end

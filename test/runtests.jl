@@ -524,6 +524,27 @@ using J1939Parser
     end
 
     # =========================================================================
+    # Zero allocations
+    # =========================================================================
+    @testset "zero allocations" begin
+        cid  = CanId(3, 0xF0, 0x04, 0x00)
+        sig  = Signal("RPM", 1, 1, 16, 0.125, 0.0)
+        msg  = CanMessage("EEC1", cid, [sig])
+        msgs = [msg]
+        frame = CanFrame(encode_can_id(cid), UInt8[0x40, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+        sd    = create_signal_dict([msg])
+
+        # Warm up JIT
+        decode!(frame, msg, sd)
+        match_and_decode!(frame, msgs, sd)
+        encode(msg, sd)
+
+        @test @allocated(decode!(frame, msg, sd)) == 0
+        @test @allocated(match_and_decode!(frame, msgs, sd)) == 0
+        @test @allocated(encode(msg, sd)) == 0
+    end
+
+    # =========================================================================
     # J1939 bit masks
     # =========================================================================
     @testset "J1939 masks" begin

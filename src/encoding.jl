@@ -36,7 +36,7 @@ frame = encode(msg, sigdict)
 # frame.data contains raw 12000 (1500.0 / 0.125) in bytes 4-5
 ```
 """
-function CU.encode(message::CanMessage, sigdict::AbstractDict{String,<:Real})
+@inline function CU.encode(message::CanMessage, sigdict::AbstractDict{String,<:Real})
     data_g = UInt64(0)
 
     for sig in message.signals

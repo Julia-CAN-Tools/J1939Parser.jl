@@ -57,6 +57,19 @@ struct CanId
             "CanId: dp must be 0 or 1, got $dp"))
         return new(priority, edp, dp, pf, ps, sa)
     end
+
+    # Raw bit-decode — bit extraction always produces valid values, skip validation
+    @inline function CanId(rawid::Integer)
+        r = UInt32(rawid)
+        return new(
+            UInt8((r >> 26) & 0x7),   # priority
+            UInt8((r >> 25) & 0x1),   # edp
+            UInt8((r >> 24) & 0x1),   # dp
+            UInt8((r >> 16) & 0xFF),  # pf
+            UInt8((r >>  8) & 0xFF),  # ps
+            UInt8( r        & 0xFF),  # sa
+        )
+    end
 end
 
 """
@@ -74,30 +87,6 @@ function CanId(priority::Integer, pf::Integer, ps::Integer, sa::Integer)
     return CanId(UInt8(priority), UInt8(0), UInt8(0), UInt8(pf), UInt8(ps), UInt8(sa))
 end
 
-"""
-    CanId(rawid::Integer)
-
-Construct a `CanId` by decoding a raw 29-bit CAN identifier into its J1939 fields.
-
-# Example
-
-```julia
-id = CanId(0x0CF00400)
-id.priority  # 3
-id.pf        # 0xF0
-id.ps        # 0x04
-id.sa        # 0x00
-```
-"""
-function CanId(rawid::Integer)
-    priority = UInt8((rawid & PRIORITY_MASK) >> 26)
-    edp = UInt8((rawid & EDP_MASK) >> 25)
-    dp = UInt8((rawid & DP_MASK) >> 24)
-    pf = UInt8((rawid & PF_MASK) >> 16)
-    ps = UInt8((rawid & PS_MASK) >> 8)
-    sa = UInt8(rawid & SA_MASK)
-    return CanId(priority, edp, dp, pf, ps, sa)
-end
 
 CanId() = CanId(UInt32(0))
 
