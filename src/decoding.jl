@@ -29,7 +29,7 @@ decode!(frame, msg, sigdict)
 sigdict["EngineRPM"]  # physical RPM value
 ```
 """
-@inline function CU.decode!(frame::CanFrame, message::CanMessage, sigdict::Dict{String,Float64})
+@inline function CU.decode!(frame::CanFrame, message::CanMessage, sigdict::AbstractDict{String,Float64})
     data_g = data_to_int(frame.data)
     for sig in message.signals
         sigbits = extract_signal(data_g, sig)
@@ -72,7 +72,7 @@ frame2 = CanFrame(0x18FF0000, UInt8[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x
 match_and_decode!(frame2, messages, sigdict)  # false
 ```
 """
-@inline function CU.match_and_decode!(frame::CanFrame, messages::Vector{CanMessage}, sigdict::Dict{String,Float64})
+@inline function CU.match_and_decode!(frame::CanFrame, messages::Vector{CanMessage}, sigdict::AbstractDict{String,Float64})
     rawid    = frame.canid
     frame_pf = UInt8((rawid >> 16) & 0xFF)
     frame_ps = UInt8((rawid >>  8) & 0xFF)
@@ -103,7 +103,7 @@ end
 
 O(1) hash-indexed lookup variant. Key = `frame.canid & 0x00FFFFFF`.
 """
-@inline function CU.match_and_decode!(frame::CanFrame, index::Dict{UInt32,CanMessage}, sigdict::Dict{String,Float64})
+@inline function CU.match_and_decode!(frame::CanFrame, index::Dict{UInt32,CanMessage}, sigdict::AbstractDict{String,Float64})
     key = frame.canid & UInt32(0x00FFFFFF)
     msg = get(index, key, nothing)
     msg === nothing && return false
