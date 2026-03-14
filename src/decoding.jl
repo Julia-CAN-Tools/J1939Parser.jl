@@ -88,3 +88,25 @@ match_and_decode!(frame2, messages, sigdict)  # false
 
     return false
 end
+
+"""
+    message_match_key(msg::CanMessage) -> UInt32
+
+J1939 match key: `canid & 0x00FFFFFF` (PF:PS:SA, ignoring Priority/EDP/DP).
+"""
+@inline function CU.message_match_key(msg::CanMessage)::UInt32
+    return encode_can_id(msg.canid) & UInt32(0x00FFFFFF)
+end
+
+"""
+    match_and_decode!(frame, index::Dict{UInt32,CanMessage}, sigdict) -> Bool
+
+O(1) hash-indexed lookup variant. Key = `frame.canid & 0x00FFFFFF`.
+"""
+@inline function CU.match_and_decode!(frame::CanFrame, index::Dict{UInt32,CanMessage}, sigdict::Dict{String,Float64})
+    key = frame.canid & UInt32(0x00FFFFFF)
+    msg = get(index, key, nothing)
+    msg === nothing && return false
+    CU.decode!(frame, msg, sigdict)
+    return true
+end

@@ -57,7 +57,7 @@ import CANUtils as CU
 using CANUtils: CanFrame, Signal, AbstractCanMessage
 using CANUtils: extract_bits, extract_signal, data_to_int
 using CANUtils: add_bits, add_signal, uint_to_payload
-using CANUtils: decode!, match_and_decode!, encode, create_signal_dict
+using CANUtils: decode!, match_and_decode!, encode, create_signal_dict, message_match_key
 
 using Printf
 using PrecompileTools
@@ -89,7 +89,7 @@ export CanId, CanMessage
 export encode_can_id, decode_can_id, pgn
 
 # Export interface implementations (also available via CU.decode! etc.)
-export decode!, match_and_decode!, encode, create_signal_dict
+export decode!, match_and_decode!, encode, create_signal_dict, message_match_key
 export create_signal_dict_storage
 
 @compile_workload begin

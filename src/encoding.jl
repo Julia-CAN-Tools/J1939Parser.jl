@@ -1,5 +1,16 @@
 # J1939 encoding - implements CANUtils interface
 
+@noinline function _throw_negative_raw(name, phys_val, raw_rounded, offset, scaling)
+    throw(ArgumentError(
+        "Signal '$(name)': physical value $(phys_val) yields negative raw value " *
+        "$raw_rounded (below representable range for offset=$(offset), scaling=$(scaling))"))
+end
+
+@noinline function _throw_overflow_raw(name, raw_rounded, length, max_raw)
+    throw(ArgumentError(
+        "Signal '$(name)': raw value $raw_rounded exceeds $(length)-bit maximum ($max_raw)"))
+end
+
 """
     encode(message::CanMessage, sigdict::AbstractDict{String,<:Real}) -> CanFrame
 
@@ -45,12 +56,9 @@ frame = encode(msg, sigdict)
 
         raw = (Float64(sigdict[sig.name]) - sig.offset) / sig.scaling
         raw_rounded = round(Int64, raw)
-        raw_rounded < 0 && throw(ArgumentError(
-            "Signal '$(sig.name)': physical value $(sigdict[sig.name]) yields negative raw value " *
-            "$raw_rounded (below representable range for offset=$(sig.offset), scaling=$(sig.scaling))"))
+        raw_rounded < 0 && _throw_negative_raw(sig.name, sigdict[sig.name], raw_rounded, sig.offset, sig.scaling)
         max_raw = sig.length >= 64 ? typemax(UInt64) : (UInt64(1) << sig.length) - UInt64(1)
-        UInt64(raw_rounded) > max_raw && throw(ArgumentError(
-            "Signal '$(sig.name)': raw value $raw_rounded exceeds $(sig.length)-bit maximum ($max_raw)"))
+        UInt64(raw_rounded) > max_raw && _throw_overflow_raw(sig.name, raw_rounded, sig.length, max_raw)
         sigbits = UInt64(raw_rounded)
         data_g = add_signal(data_g, sigbits, sig)
     end
