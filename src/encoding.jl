@@ -52,7 +52,8 @@ frame = encode(msg, sigdict)
 
     for sig in message.signals
         haskey(sigdict, sig.name) || throw(KeyError(sig.name))
-        sig.scaling == 0.0 && throw(ArgumentError("Signal scaling must be non-zero"))
+        (sig.scaling == 0.0 || !isfinite(sig.scaling)) && throw(ArgumentError("Signal '$(sig.name)': scaling must be finite and non-zero, got $(sig.scaling)"))
+        !isfinite(sig.offset) && throw(ArgumentError("Signal '$(sig.name)': offset must be finite, got $(sig.offset)"))
 
         raw = (Float64(sigdict[sig.name]) - sig.offset) / sig.scaling
         raw_rounded = round(Int64, raw)
